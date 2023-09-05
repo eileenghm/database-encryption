@@ -3,6 +3,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
+const encryt = require("mongoose-encryption");
 
 const app = express();
 
@@ -14,10 +15,15 @@ app.use(bodyParser.urlencoded( {
 
 mongoose.connect("mongodb://localhost:27017/userDB");
 
-const userSchema = {
+//object created from mongoose schema class 
+const userSchema = new mongoose.Schema({
     email: String,
     password: String
-}
+});
+
+const secret = "Thisisourlittlesecret.";
+//encrypt only password
+userSchema.plugin(encryt, {secret: secret, encryptedFields: ["pasword"]});
 
 //create in mongo
 const User = new mongoose.model("User", userSchema);
@@ -54,7 +60,6 @@ app.post("/login", function(req, res) {
     const password = req.body.password;
 
     //look through collection of user
-
     User.findOne({email: username})
     .then((foundUser) => {
         if (foundUser) {
