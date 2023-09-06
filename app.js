@@ -4,17 +4,32 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-const encryt = require("mongoose-encryption");
+//add cookies using passport
+const session = require("express-session");
+const passport = require("passport");
+const passportLocalMongoose = require("passport-local-mongoose");
 
+//const encryt = require("mongoose-encryption");
+//hash
+const md5 = require("md5"); 
 const app = express();
-
-console.log(process.env.API_KEY);
 
 app.use(express.static("public"));
 app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded( {
     extended: true
 }))
+
+//cookies setup session
+app.use(session({
+    secret: "asdfasdfalsdfjaskdfjaldsf",
+    resave: false,
+    saveUninitialized: false
+}));
+
+//set passport
+app.use(passport.initialize());
+app.use(passport.session());
 
 mongoose.connect("mongodb://localhost:27017/userDB");
 
@@ -24,11 +39,18 @@ const userSchema = new mongoose.Schema({
     password: String
 });
 
+//hash psw and save users to mongodb
+userSchema.plugin(passportLocalMongoose);
+
 //encrypt only password
-userSchema.plugin(encryt, {secret: secret, encryptedFields: ["pasword"]});
+//userSchema.plugin(encryt, {secret: process.env.SECRET, encryptedFields: ["pasword"]});
 
 //create in mongo
 const User = new mongoose.model("User", userSchema);
+
+passport.use(User.createStrategy());
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
 
 app.get("/", function(req, res) {
     res.render("home");
@@ -42,10 +64,34 @@ app.get("/register", function(req, res) {
     res.render("register");
 }); 
 
+app.get("/secrets", function(req, res) {
+    //login first before secret page
+    if (req.isAuthenticated()) {
+        res.render("secrets");
+    } else {
+        res.redirect("/login");
+    }
+});
+
+app.post("/register", function(req, res){
+    User.register({username: req.body.username}, req.body.password, function(err, user){
+      if (err) {
+        console.log(err);
+        res.redirect("/register");
+      } else {
+        passport.authenticate("local")(req, res, function(){
+          res.redirect("/secrets");
+        });
+      }
+    });
+  
+});
+
+/*
 app.post("/register", function(req, res) {
     const newUser = new User({
         email: req.body.username,
-        password: req.body.password
+        password: md5(req.body.password)
     });
     newUser.save()
     .then(() => {
@@ -57,9 +103,10 @@ app.post("/register", function(req, res) {
     });
 });
 
+
 app.post("/login", function(req, res) {
     const username = req.body.username;
-    const password = req.body.password;
+    const password = md5(req.body.password);
 
     //look through collection of user
     User.findOne({email: username})
@@ -74,6 +121,7 @@ app.post("/login", function(req, res) {
         console.log(err);
     })
 })
+*/
 
 app.listen(3000, function() {
     console.log("Server start on port 3000.");
