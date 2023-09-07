@@ -39,7 +39,8 @@ mongoose.connect("mongodb://localhost:27017/userDB");
 //object created from mongoose schema class 
 const userSchema = new mongoose.Schema({
     email: String,
-    password: String
+    password: String,
+    googleId: String
 });
 
 //hash psw and save users to mongodb
@@ -59,11 +60,15 @@ passport.serializeUser(function(user, done) {
   done(null, user.id);
 });
 
-passport.deserializeUser(function(id, done) {
-  User.findById(id, function(err, user) {
-    done(err, user);
+passport.deserializeUser(async function(id, done) {
+    try {
+      const user = await User.findById(id);
+      done(null, user);
+    } catch (err) {
+      done(err, null);
+    }
   });
-});
+  
 
 passport.use(new GoogleStrategy({
     clientID: process.env.CLIENT_ID,
@@ -73,7 +78,7 @@ passport.use(new GoogleStrategy({
   },
   function(accessToken, refreshToken, profile, cb) {
     console.log(profile);
-
+    //login to profile, try to find in mongoDB or create user
     User.findOrCreate({ googleId: profile.id }, function (err, user) {
       return cb(err, user);
     });
@@ -85,7 +90,7 @@ app.get("/", function(req, res) {
     res.render("home");
 }); 
 
-//get user profile on google
+//start authentication on google profile
 app.get("/auth/google",
   passport.authenticate('google', { scope: ["profile"] })
 );
@@ -113,6 +118,46 @@ app.get("/secrets", function(req, res) {
     } else {
         res.redirect("/login");
     }
+});
+
+app.get("/submit", function(req, res){
+    if (req.isAuthenticated()){
+      res.render("submit");
+    } else {
+      res.redirect("/login");
+    }
+  });
+  
+  app.post("/submit", function(req, res){
+    const submittedSecret = req.body.secret;
+  
+  //Once the user is authenticated and their session gets saved, their user details are saved to req.user.
+    // console.log(req.user.id);
+  
+    User.findById(req.user.id)
+    .then(foundUser => {
+      if (foundUser) {
+        foundUser.secret = submittedSecret;
+        return foundUser.save();
+      }
+    })
+    .then(() => {
+      res.redirect("/secrets");
+    })
+    .catch(err => {
+      console.error(err);
+    });
+  });
+
+  app.get("/logout", function(req, res){
+    req.logout(function(err) {
+        if (err) {
+            console.error(err);
+            res.redirect("/"); // Redirect even if there's an error
+        } else {
+            res.redirect("/");
+        }
+    });
 });
 
 app.post("/register", function(req, res){
